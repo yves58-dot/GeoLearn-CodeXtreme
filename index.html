@@ -8,16 +8,27 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- TensorFlow.js and Teachable Machine -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
         .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
         #app-container { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         #scroll-content { flex-grow: 1; overflow-y: auto; padding-bottom: 80px; }
+        
+        /* Filter tab styles */
+        .filter-active { background-color: #1e3a8a; color: white; border-color: #1e3a8a; }
+        .filter-inactive { background-color: white; color: #4b5563; border-color: #e5e7eb; }
+        .sub-filter-active { background-color: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+        .sub-filter-inactive { background-color: white; color: #6b7280; border-color: #e5e7eb; }
     </style>
 </head>
 <body class="text-gray-800">
@@ -32,7 +43,7 @@
                     <i data-lucide="microscope" class="w-7 h-7 text-blue-300"></i>
                     <h1 class="text-2xl font-bold tracking-tight">GeoLearn AI</h1>
                 </div>
-                <span class="bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-md">DEV</span>
+                <span class="bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-md">PRO</span>
             </div>
             <p id="header-subtitle" class="text-blue-200 text-sm font-medium">Digital Pocket Laboratory</p>
         </div>
@@ -41,47 +52,216 @@
     <!-- Scrollable Main Content -->
     <main id="scroll-content" class="px-4 pt-4 relative z-10">
         
-        <!-- TAB 1: SCANNER (UI Only) -->
+        <!-- ========================================== -->
+        <!-- TAB 1: SCANNER -->
+        <!-- ========================================== -->
         <div id="tab-scanner" class="block">
-            <div class="glass-panel rounded-2xl shadow-md p-6 border border-gray-100 mb-6 text-center">
-                <i data-lucide="camera" class="w-12 h-12 text-gray-400 mx-auto mb-3"></i>
-                <h3 class="font-bold text-gray-800">Scanner UI goes here</h3>
-                <p class="text-xs text-gray-500 mt-2">Waiting for AI integration...</p>
+            <div class="glass-panel rounded-2xl shadow-md p-6 border border-gray-100 mb-6">
+                <div id="status-box" class="flex flex-col items-center justify-center py-6">
+                    <div id="loading-spinner" class="loader mb-4"></div>
+                    <h2 id="status-text" class="text-lg font-semibold text-gray-700 text-center">Initializing AI...<br><span class="text-sm font-normal text-gray-500">Connecting to model</span></h2>
+                </div>
+
+                <div id="upload-area" class="hidden flex flex-col items-center">
+                    <div class="w-full relative rounded-xl overflow-hidden bg-gray-100 border-2 border-dashed border-gray-300 mb-4 h-56 flex items-center justify-center">
+                        <img id="image-preview" class="absolute inset-0 w-full h-full object-cover hidden z-10" alt="Rock preview">
+                        <div id="placeholder-ui" class="text-center z-0 px-4">
+                            <i data-lucide="focus" class="w-10 h-10 text-gray-400 mx-auto mb-2"></i>
+                            <p class="text-sm text-gray-500">Tap below to scan sample</p>
+                        </div>
+                    </div>
+                    <label for="image-upload" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md cursor-pointer transition-colors flex items-center justify-center space-x-2">
+                        <i data-lucide="camera" class="w-5 h-5"></i><span>Scan Rock</span>
+                    </label>
+                    <input type="file" id="image-upload" accept="image/*" capture="environment" class="hidden">
+                </div>
+            </div>
+
+            <div id="scanning-animation" class="hidden glass-panel rounded-2xl shadow-md p-6 border border-gray-100 mb-6 text-center">
+                <i data-lucide="scan-line" class="w-12 h-12 text-blue-600 mx-auto mb-3 animate-pulse"></i>
+                <h3 class="font-bold text-gray-800">Analyzing Specs...</h3>
+            </div>
+
+            <div id="results-area" class="hidden mb-6">
+                <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                    <div id="header-bg" class="bg-green-50 border-b border-green-100 p-4 flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-gray-600 uppercase" id="match-label">Primary Match</p>
+                            <h2 id="rock-name" class="text-xl font-bold text-gray-900">Granite</h2>
+                            <p id="rock-location" class="text-xs text-gray-500 mt-1"><i data-lucide="map-pin" class="w-3 h-3 inline"></i> Standard Reference</p>
+                        </div>
+                        <div id="confidence-badge" class="bg-green-100 text-green-800 font-bold px-2 py-1 rounded-full text-xs flex items-center">
+                            <span id="confidence-score">98%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 border-b border-gray-100">
+                        <p id="rock-desc" class="text-gray-600 text-sm leading-relaxed">Loading...</p>
+                        <div id="rock-resources-area" class="mt-3 space-y-2 hidden"></div>
+                    </div>
+
+                    <div id="mineral-section" class="p-4 bg-gray-50">
+                        <h3 class="text-xs font-bold uppercase text-gray-500 mb-2">Composition</h3>
+                        <ul id="mineral-list" class="space-y-2"></ul>
+                    </div>
+                    
+                    <div id="chat-tutor-btn-area" class="p-4 bg-white border-t border-gray-100">
+                        <button onclick="openChatbot()" class="w-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold py-2 px-4 rounded-xl flex items-center justify-center space-x-2 hover:bg-indigo-100 transition">
+                            <i data-lucide="bot" class="w-5 h-5"></i>
+                            <span>Ask AI Tutor about this</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- TAB 2: NOTEBOOK (UI Only) -->
+        <!-- ========================================== -->
+        <!-- TAB 2: NOTEBOOK -->
+        <!-- ========================================== -->
         <div id="tab-notebook" class="hidden">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="font-bold text-gray-800 text-lg">Field Notebook</h2>
+                <span class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full" id="session-count">0 Scans</span>
             </div>
-            <div class="text-center py-12 text-gray-400">
+            <div id="empty-notebook" class="text-center py-12 text-gray-400">
                 <i data-lucide="book-dashed" class="w-16 h-16 mx-auto mb-3 opacity-50"></i>
-                <p>Notebook database pending...</p>
+                <p>Your notebook is empty.</p>
             </div>
+            <div id="history-list" class="space-y-3"></div>
         </div>
 
-        <!-- TAB 3: LEARNING HUB (UI Only) -->
+        <!-- ========================================== -->
+        <!-- TAB 3: LEARNING HUB -->
+        <!-- ========================================== -->
         <div id="tab-hub" class="hidden">
             <h2 class="font-bold text-gray-800 text-lg mb-4">Learning Hub</h2>
-            <div class="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-                <i data-lucide="database" class="w-12 h-12 mx-auto mb-3 opacity-50"></i>
-                <p>Educational content loading...</p>
+            
+            <div id="featured-carousel" class="flex flex-col space-y-4 mb-6">
+                <!-- Dynamically injected featured items -->
             </div>
+
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-bold uppercase text-gray-500">Database Encyclopedia</h3>
+            </div>
+            
+            <div class="relative mb-4">
+                <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
+                <input type="text" id="hub-search" onkeyup="renderLearningHub()" placeholder="Search rocks, minerals, or locations..." class="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-sm transition">
+            </div>
+            
+            <div class="flex overflow-x-auto space-x-2 pb-2 mb-1 no-scrollbar">
+                <button onclick="setPrimaryFilter('All')" id="p-filter-All" class="filter-active border px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shadow-sm transition">All</button>
+                <button onclick="setPrimaryFilter('Rock')" id="p-filter-Rock" class="filter-inactive border px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shadow-sm transition">Rocks</button>
+                <button onclick="setPrimaryFilter('Mineral')" id="p-filter-Mineral" class="filter-inactive border px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shadow-sm transition">Minerals</button>
+            </div>
+
+            <div id="secondary-filters" class="hidden flex overflow-x-auto space-x-2 pb-2 mb-2 no-scrollbar border-b border-gray-200">
+                <button onclick="setSecondaryFilter('All')" id="s-filter-All" class="sub-filter-active border px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition">All Rocks</button>
+                <button onclick="setSecondaryFilter('Igneous')" id="s-filter-Igneous" class="sub-filter-inactive border px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition">Igneous</button>
+                <button onclick="setSecondaryFilter('Sedimentary')" id="s-filter-Sedimentary" class="sub-filter-inactive border px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition">Sedimentary</button>
+                <button onclick="setSecondaryFilter('Metamorphic')" id="s-filter-Metamorphic" class="sub-filter-inactive border px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition">Metamorphic</button>
+            </div>
+
+            <div id="database-grid" class="grid grid-cols-2 gap-3 mt-3"></div>
         </div>
 
-        <!-- TAB 4: ADMIN PANEL (UI Only) -->
+        <!-- ========================================== -->
+        <!-- TAB 4: SECURE ADMIN PANEL -->
+        <!-- ========================================== -->
         <div id="tab-admin" class="hidden">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="font-bold text-gray-800 text-lg flex items-center"><i data-lucide="shield-check" class="w-5 h-5 mr-2 text-blue-600"></i> Admin Portal</h2>
             </div>
-            <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center mt-10">
-                <i data-lucide="lock" class="w-8 h-8 text-blue-600 mb-2"></i>
-                <p class="text-xs text-gray-500 text-center">Security implementation pending...</p>
+            
+            <div id="admin-login" class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center mt-10">
+                <div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                    <i data-lucide="lock" class="w-8 h-8 text-blue-600"></i>
+                </div>
+                <h3 class="font-bold text-gray-800 mb-1 text-center">Authorized Access Only</h3>
+                <p class="text-xs text-gray-500 mb-6 text-center">Please enter the Founder PIN to access the CMS.</p>
+                <input type="password" id="admin-pin" placeholder="Enter PIN" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-center tracking-widest outline-none focus:border-blue-500 mb-3" autocomplete="off">
+                <button onclick="checkAdminPin()" class="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-black transition">Unlock Portal</button>
+                <p id="pin-error" class="text-red-500 text-xs text-center mt-3 hidden font-bold">Incorrect PIN. Access Denied.</p>
+            </div>
+
+            <div id="admin-content" class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 hidden mb-6">
+                <div class="mb-4 pb-3 border-b border-gray-100 flex items-center justify-between">
+                    <p class="text-xs text-green-600 font-bold flex items-center"><i data-lucide="unlock" class="w-3 h-3 mr-1"></i> System Unlocked</p>
+                    <button onclick="lockAdmin()" class="text-xs text-gray-400 hover:text-gray-800">Lock</button>
+                </div>
+
+                <form id="admin-form" onsubmit="addRockToDatabase(event)">
+                    <div class="flex space-x-4 mb-4">
+                        <label class="flex items-center text-sm font-bold text-gray-700 cursor-pointer">
+                            <input type="radio" name="itemType" value="Rock" checked onchange="toggleCategorySelect()" class="mr-2 accent-blue-600"> Rock
+                        </label>
+                        <label class="flex items-center text-sm font-bold text-gray-700 cursor-pointer">
+                            <input type="radio" name="itemType" value="Mineral" onchange="toggleCategorySelect()" class="mr-2 accent-blue-600"> Mineral
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Name</label>
+                        <input type="text" id="admin-name" required placeholder="e.g., Granite" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Location / Origin</label>
+                        <input type="text" id="admin-location" placeholder="e.g., Rutongo Mines, Rwanda" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+                    </div>
+
+                    <div id="category-container" class="mb-3">
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Rock Classification</label>
+                        <select id="admin-category" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+                            <option value="Igneous">Igneous</option>
+                            <option value="Sedimentary">Sedimentary</option>
+                            <option value="Metamorphic">Metamorphic</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Upload Reference Image</label>
+                        <input type="file" id="admin-img-upload" accept="image/*" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Description</label>
+                        <textarea id="admin-desc" required placeholder="Scientific description..." class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 h-20"></textarea>
+                    </div>
+
+                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-md">
+                        <i data-lucide="upload-cloud" class="w-4 h-4 inline-block mr-1"></i> Publish to Database
+                    </button>
+                    <p id="admin-success" class="text-green-600 text-xs text-center mt-3 hidden font-bold">Item successfully published!</p>
+                </form>
+
+                <div class="mt-8 border-t border-gray-200 pt-6">
+                    <h3 class="font-bold text-gray-800 mb-1">Manage Database</h3>
+                    <p class="text-xs text-gray-500 mb-4">Tap the trash icon to instantly remove an item from the app.</p>
+                    <div id="admin-manage-list" class="space-y-2 max-h-60 overflow-y-auto no-scrollbar pr-1"></div>
+                </div>
             </div>
         </div>
 
     </main>
+
+    <!-- Chatbot Overlay -->
+    <div id="chatbot-overlay" class="fixed inset-0 bg-gray-900/60 z-50 hidden flex-col justify-end">
+        <div class="bg-white w-full max-w-md mx-auto h-[80vh] rounded-t-3xl shadow-2xl flex flex-col transition-transform transform translate-y-0">
+            <div class="p-4 border-b flex items-center justify-between bg-indigo-50 rounded-t-3xl">
+                <div class="flex items-center space-x-2">
+                    <div class="bg-indigo-600 p-2 rounded-full"><i data-lucide="bot" class="w-5 h-5 text-white"></i></div>
+                    <div><h3 class="font-bold text-indigo-900">GeoTutor AI</h3></div>
+                </div>
+                <button onclick="closeChatbot()" class="p-2"><i data-lucide="x" class="w-4 h-4 text-gray-500"></i></button>
+            </div>
+            <div id="chat-history" class="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-50"></div>
+            <div class="p-3 bg-white border-t flex items-center space-x-2">
+                <input type="text" id="chat-input" placeholder="Ask a question..." class="flex-grow bg-gray-100 rounded-full px-4 py-2 text-sm outline-none">
+                <button onclick="sendChatMessage()" class="bg-indigo-600 text-white p-2 rounded-full"><i data-lucide="send" class="w-4 h-4 mt-0.5 ml-0.5"></i></button>
+            </div>
+        </div>
+    </div>
 
     <!-- BOTTOM NAVIGATION BAR -->
     <nav class="bg-white border-t border-gray-200 absolute bottom-0 w-full z-40 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
@@ -108,42 +288,437 @@
 </div>
 
 <script>
-    // Initialize icons
     lucide.createIcons();
 
-    // Basic Tab Switching Logic
+    const URL = "https://teachablemachine.withgoogle.com/models/Q9OT3CgOq/";
+    let model, maxPredictions;
+    let scanHistory = [];
+    let currentScannedRock = "";
+    
+    let isAdminUnlocked = false; 
+    let tempAdminImageBase64 = null; 
+    let primaryFilter = "All"; 
+    let secondaryFilter = "All"; 
+
+    // --- MASTER DATABASE SCHEMA ---
+    let rockDatabase = {
+        "Granite_1": {
+            name: "Granite", location: "Standard Reference",
+            type: "Rock", category: "Igneous",
+            image: "https://images.unsplash.com/photo-1629846887556-9fc230193108?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80",
+            description: "A coarse-grained igneous rock formed from slow crystallization. Highly durable.",
+            minerals: [{ name: "Quartz", percentage: "20-60%", colorCode: "bg-gray-300" }],
+            resources: [
+                { title: "Formation of Granite (3D Animation)", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+                { title: "UR Geology Dept Study Guide (PDF)", url: "#" }
+            ], status: "success"
+        },
+        "Sandstone_1": {
+            name: "Sandstone", location: "Standard Reference",
+            type: "Rock", category: "Sedimentary",
+            image: "https://images.unsplash.com/photo-1601633519842-171b31cd9a29?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80",
+            description: "A clastic sedimentary rock composed mainly of sand-sized mineral particles.",
+            minerals: [{ name: "Quartz", percentage: "Dominant", colorCode: "bg-gray-200" }],
+            resources: [], status: "success"
+        },
+        "Breccia_1": {
+            name: "Breccia", location: "Standard Reference",
+            type: "Rock", category: "Sedimentary",
+            image: "https://images.unsplash.com/photo-1588616116847-b8938e51a6df?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80",
+            description: "Composed of large, sharp, angular fragments bound together by a fine-grained matrix.",
+            minerals: [{ name: "Rock Fragments", percentage: "Dominant", colorCode: "bg-stone-600" }],
+            resources: [], status: "success"
+        },
+        "Coltan_1": {
+            name: "Coltan", location: "Rwanda General",
+            type: "Mineral", category: "Mineral",
+            image: "", 
+            description: "Columbite-tantalite, a dull black metallic ore crucial for manufacturing electronics.",
+            minerals: [], resources: [], status: "success"
+        },
+        // Edge cases required for the scanner
+        "Sys_Error": { name: "Not a Rock", location: "", description: "Not a geological specimen. Ensure good lighting and a clear subject.", minerals: [], status: "error", type: "System" },
+        "Sys_Unknown": { name: "Unknown", location: "", description: "AI cannot confidently identify this sample. It might not be in our database yet.", minerals: [], status: "warning", type: "System" }
+    };
+
+    function getWeekNumber(d) {
+        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+    }
+
+    function renderFeaturedCarousel() {
+        const carousel = document.getElementById('featured-carousel');
+        carousel.innerHTML = ""; 
+        const now = new Date();
+        const rocks = Object.values(rockDatabase).filter(data => data.type === 'Rock');
+        const minerals = Object.values(rockDatabase).filter(data => data.type === 'Mineral');
+
+        if (rocks.length > 0) {
+            const monthIndex = (now.getFullYear() * 12 + now.getMonth()) % rocks.length;
+            const rockData = rocks[monthIndex];
+            carousel.innerHTML += `
+                <div class="bg-gradient-to-br from-blue-600 to-indigo-800 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden w-full">
+                    <div class="absolute -right-4 -top-4 opacity-20"><i data-lucide="mountain" class="w-32 h-32"></i></div>
+                    <span class="bg-white/20 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">Rock of the Month</span>
+                    <h3 class="text-2xl font-bold mt-2">${rockData.name}</h3>
+                    <p class="text-blue-100 text-xs mb-2"><i data-lucide="map-pin" class="w-3 h-3 inline"></i> ${rockData.location}</p>
+                    <p class="text-blue-100 text-sm mt-1 mb-3 pr-8 truncate">${rockData.description}</p>
+                    <button class="bg-white text-blue-800 text-sm font-bold py-1 px-4 rounded-lg shadow-sm relative z-10">Read Lesson</button>
+                </div>
+            `;
+        }
+
+        if (minerals.length > 0) {
+            const weekIndex = (now.getFullYear() * 52 + getWeekNumber(now)) % minerals.length;
+            const minData = minerals[weekIndex];
+            carousel.innerHTML += `
+                <div class="bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden w-full">
+                    <div class="absolute -right-4 -top-4 opacity-20"><i data-lucide="gem" class="w-32 h-32"></i></div>
+                    <span class="bg-white/20 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">Mineral of the Week</span>
+                    <h3 class="text-2xl font-bold mt-2">${minData.name}</h3>
+                    <p class="text-emerald-100 text-xs mb-2"><i data-lucide="map-pin" class="w-3 h-3 inline"></i> ${minData.location}</p>
+                    <p class="text-emerald-100 text-sm mt-1 mb-3 pr-8 truncate">${minData.description}</p>
+                    <button class="bg-white text-teal-800 text-sm font-bold py-1 px-4 rounded-lg shadow-sm relative z-10">Read Lesson</button>
+                </div>
+            `;
+        }
+        lucide.createIcons();
+    }
+
+    // --- ADMIN LOGIC ---
+    function checkAdminPin() {
+        if (document.getElementById('admin-pin').value === "2026") {
+            isAdminUnlocked = true;
+            document.getElementById('admin-login').classList.add('hidden');
+            document.getElementById('admin-content').classList.remove('hidden');
+            document.getElementById('admin-pin').value = ""; 
+            renderAdminManageList(); 
+        } else {
+            document.getElementById('pin-error').classList.remove('hidden');
+            setTimeout(() => document.getElementById('pin-error').classList.add('hidden'), 2000);
+        }
+    }
+
+    function lockAdmin() {
+        isAdminUnlocked = false;
+        document.getElementById('admin-content').classList.add('hidden');
+        document.getElementById('admin-login').classList.remove('hidden');
+    }
+
+    function toggleCategorySelect() {
+        const type = document.querySelector('input[name="itemType"]:checked').value;
+        const catContainer = document.getElementById('category-container');
+        if(type === "Rock") catContainer.classList.remove('hidden');
+        else catContainer.classList.add('hidden');
+    }
+
+    document.getElementById('admin-img-upload').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) { tempAdminImageBase64 = event.target.result; };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function addRockToDatabase(e) {
+        e.preventDefault(); 
+        if(!isAdminUnlocked) return; 
+        
+        const type = document.querySelector('input[name="itemType"]:checked').value;
+        const name = document.getElementById('admin-name').value.trim();
+        const loc = document.getElementById('admin-location').value.trim() || "Unknown Location";
+        const desc = document.getElementById('admin-desc').value;
+        const category = type === "Rock" ? document.getElementById('admin-category').value : "Mineral";
+        
+        const uniqueId = name.replace(/\s+/g, '_') + "_" + Date.now();
+
+        rockDatabase[uniqueId] = {
+            name: name, location: loc,
+            type: type, category: category,
+            image: tempAdminImageBase64 || "", 
+            description: desc, minerals: [], resources: [], status: "success"
+        };
+
+        showAdminMessage("Item successfully published!", "text-green-600");
+        document.getElementById('admin-form').reset();
+        tempAdminImageBase64 = null;
+        
+        renderLearningHub(); 
+        renderFeaturedCarousel(); 
+        renderAdminManageList(); 
+    }
+
+    function deleteFromDatabase(id) {
+        if(!isAdminUnlocked) return;
+        delete rockDatabase[id]; 
+        showAdminMessage(`Item has been deleted.`, "text-red-500");
+        renderLearningHub(); 
+        renderFeaturedCarousel(); 
+        renderAdminManageList(); 
+    }
+
+    function renderAdminManageList() {
+        const list = document.getElementById('admin-manage-list');
+        list.innerHTML = "";
+        for (const [id, data] of Object.entries(rockDatabase)) {
+            if (data.type === "System") continue;
+            let iconType = data.type === 'Mineral' ? 'gem' : 'mountain';
+            let catText = data.type === 'Rock' ? `- ${data.category}` : '';
+            list.innerHTML += `
+                <div class="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500"><i data-lucide="${iconType}" class="w-4 h-4"></i></div>
+                        <div>
+                            <p class="text-sm font-bold text-gray-800 leading-tight">${data.name}</p>
+                            <p class="text-[10px] text-gray-500 uppercase">${data.type} ${catText} | ${data.location}</p>
+                        </div>
+                    </div>
+                    <button onclick="deleteFromDatabase('${id}')" class="text-gray-400 hover:text-red-500 transition p-2 bg-gray-50 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            `;
+        }
+        lucide.createIcons();
+    }
+
+    function showAdminMessage(text, colorClass) {
+        const msg = document.getElementById('admin-success');
+        msg.textContent = text;
+        msg.className = `${colorClass} text-xs text-center mt-3 font-bold`;
+        msg.classList.remove('hidden');
+        setTimeout(() => msg.classList.add('hidden'), 3000);
+    }
+
+    // --- SEARCH AND FILTERING ---
+    function setPrimaryFilter(type) {
+        primaryFilter = type;
+        secondaryFilter = "All"; 
+        ['All', 'Rock', 'Mineral'].forEach(f => {
+            document.getElementById(`p-filter-${f}`).className = (f === type) ? "filter-active border px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shadow-sm transition" : "filter-inactive border px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shadow-sm transition";
+        });
+        const secContainer = document.getElementById('secondary-filters');
+        if (type === 'Rock') { secContainer.classList.remove('hidden'); updateSecondaryButtons(); } 
+        else { secContainer.classList.add('hidden'); }
+        renderLearningHub();
+    }
+
+    function setSecondaryFilter(cat) {
+        secondaryFilter = cat;
+        updateSecondaryButtons();
+        renderLearningHub();
+    }
+
+    function updateSecondaryButtons() {
+        ['All', 'Igneous', 'Sedimentary', 'Metamorphic'].forEach(f => {
+            document.getElementById(`s-filter-${f}`).className = (f === secondaryFilter) ? "sub-filter-active border px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition" : "sub-filter-inactive border px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition";
+        });
+    }
+
+    function renderLearningHub() {
+        const grid = document.getElementById('database-grid');
+        grid.innerHTML = ""; 
+        const searchQuery = document.getElementById('hub-search').value.toLowerCase();
+
+        for (const [id, data] of Object.entries(rockDatabase)) {
+            if (data.type === "System") continue;
+            
+            // Search Logic
+            if (searchQuery) {
+                const searchString = `${data.name} ${data.location} ${data.description}`.toLowerCase();
+                if (!searchString.includes(searchQuery)) continue;
+            }
+
+            // Filter Logic
+            if (primaryFilter !== "All" && data.type !== primaryFilter) continue;
+            if (primaryFilter === "Rock" && secondaryFilter !== "All" && data.category !== secondaryFilter) continue;
+
+            let visualContent = `<div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-lg mx-auto mb-2 border border-blue-100 flex items-center justify-center"><i data-lucide="${data.type === 'Mineral' ? 'gem' : 'mountain'}" class="w-8 h-8"></i></div>`;
+            if (data.image) visualContent = `<img src="${data.image}" class="w-16 h-16 object-cover rounded-lg mx-auto mb-2 border border-gray-200 shadow-sm">`;
+            
+            grid.innerHTML += `
+                <div class="bg-white p-3 rounded-xl border border-gray-100 shadow-sm text-center">
+                    ${visualContent}
+                    <h4 class="font-bold text-sm truncate">${data.name}</h4>
+                    <p class="text-[10px] text-gray-500 truncate"><i data-lucide="map-pin" class="w-2.5 h-2.5 inline"></i> ${data.location}</p>
+                </div>
+            `;
+        }
+        lucide.createIcons();
+    }
+    
+    renderLearningHub();
+    renderFeaturedCarousel(); 
+
+    // --- AI INITIALIZATION & SCANNING ---
+    async function init() {
+        try {
+            model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+            maxPredictions = model.getTotalClasses();
+            document.getElementById('status-box').classList.add('hidden');
+            document.getElementById('upload-area').classList.remove('hidden');
+        } catch (error) {
+            document.getElementById('status-text').innerHTML = "AI Load Error.<br><span class='text-xs text-red-500'>Check connection.</span>";
+            document.getElementById('loading-spinner').classList.add('hidden');
+        }
+    }
+
+    document.getElementById('image-upload').addEventListener('change', function(e) {
+        if (e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = document.getElementById('image-preview');
+                img.src = event.target.result;
+                img.classList.remove('hidden');
+                document.getElementById('placeholder-ui').classList.add('hidden');
+                document.getElementById('results-area').classList.add('hidden'); 
+                document.getElementById('upload-area').classList.add('hidden');
+                document.getElementById('scanning-animation').classList.remove('hidden');
+                img.onload = () => setTimeout(() => predict(img), 800); 
+            }
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
+
+    async function predict(imgElement) {
+        const prediction = await model.predict(imgElement);
+        let highestProb = 0;
+        let bestMatch = "";
+        for (let i = 0; i < maxPredictions; i++) {
+            if (prediction[i].probability > highestProb) {
+                highestProb = prediction[i].probability;
+                bestMatch = prediction[i].className.trim(); 
+            }
+        }
+        
+        let percentage = Math.round(highestProb * 100);
+        let finalRockName = percentage < 25 ? "Unknown" : bestMatch;
+        
+        displayResults(finalRockName, percentage);
+        addToNotebook(finalRockName, percentage, imgElement.src);
+        currentScannedRock = finalRockName;
+    }
+
+    function displayResults(scannedName, confidence) {
+        let searchName = scannedName.toLowerCase() === "not a rock" ? "not a rock" : scannedName.toLowerCase();
+        let foundData = Object.values(rockDatabase).find(item => item.name.toLowerCase() === searchName);
+        const data = foundData || rockDatabase["Sys_Unknown"]; 
+
+        document.getElementById('rock-name').textContent = data.name;
+        document.getElementById('rock-location').innerHTML = `<i data-lucide="map-pin" class="w-3 h-3 inline"></i> ${data.location || 'Unknown'}`;
+        document.getElementById('confidence-score').textContent = confidence + "% Match";
+        document.getElementById('rock-desc').textContent = data.description;
+
+        const headerBg = document.getElementById('header-bg');
+        const badge = document.getElementById('confidence-badge');
+        const minSec = document.getElementById('mineral-section');
+        const resArea = document.getElementById('rock-resources-area');
+        
+        headerBg.className = "border-b p-4 flex items-center justify-between ";
+        badge.className = "font-bold px-2 py-1 rounded-full text-xs flex items-center ";
+        
+        if (data.status === "success") {
+            headerBg.classList.add("bg-green-50", "border-green-100");
+            badge.classList.add("bg-green-100", "text-green-800");
+            minSec.classList.remove('hidden');
+            
+            // Load resources
+            if(data.resources && data.resources.length > 0) {
+                resArea.classList.remove('hidden');
+                resArea.innerHTML = `<h4 class="text-xs font-bold text-gray-500 mb-1">Learning Materials</h4>`;
+                data.resources.forEach(res => {
+                    let isVideo = res.url.includes("youtube.com") || res.url.includes("youtu.be");
+                    let icon = isVideo ? "youtube" : "file-text";
+                    resArea.innerHTML += `<a href="${res.url}" target="_blank" class="block bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg text-xs font-semibold text-blue-600 truncate flex items-center"><i data-lucide="${icon}" class="w-3 h-3 mr-2"></i>${res.title}</a>`;
+                });
+            } else {
+                resArea.classList.add('hidden');
+            }
+        } else {
+            headerBg.classList.add(data.status === "error" ? "bg-red-50" : "bg-yellow-50");
+            badge.classList.add(data.status === "error" ? "bg-red-100" : "bg-yellow-100", data.status === "error" ? "text-red-800" : "text-yellow-800");
+            minSec.classList.add('hidden');
+            resArea.classList.add('hidden');
+        }
+
+        document.getElementById('scanning-animation').classList.add('hidden');
+        document.getElementById('upload-area').classList.remove('hidden');
+        document.getElementById('results-area').classList.remove('hidden');
+        lucide.createIcons();
+    }
+
+    function addToNotebook(name, conf, img) {
+        if(name !== "Not a Rock" && name !== "Unknown") { name = name.charAt(0).toUpperCase() + name.slice(1); }
+        scanHistory.unshift({ name, conf, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), img });
+        document.getElementById('empty-notebook').classList.add('hidden');
+        document.getElementById('session-count').textContent = scanHistory.length + " Scans";
+        const list = document.getElementById('history-list');
+        list.innerHTML = "";
+        scanHistory.forEach(s => {
+            let color = s.name === "Not a Rock" ? "red" : (s.name === "Unknown" ? "yellow" : "green");
+            list.innerHTML += `<div class="flex items-center p-3 bg-white rounded-xl border shadow-sm"><img src="${s.img}" class="w-12 h-12 rounded bg-gray-100 object-cover mr-3"><div class="flex-grow"><h4 class="text-sm font-bold">${s.name}</h4><p class="text-xs text-gray-500">${s.time}</p></div><div class="bg-${color}-100 text-${color}-700 text-xs font-bold px-2 py-1 rounded">${s.conf}%</div></div>`;
+        });
+    }
+
     function switchTab(tabId) {
-        // Hide all tabs
         document.getElementById('tab-scanner').classList.add('hidden');
         document.getElementById('tab-notebook').classList.add('hidden');
         document.getElementById('tab-hub').classList.add('hidden');
         document.getElementById('tab-admin').classList.add('hidden');
-        
-        // Show active tab
         document.getElementById(`tab-${tabId}`).classList.remove('hidden');
 
-        // Reset all buttons to gray
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.classList.remove('text-blue-600');
             btn.classList.add('text-gray-400');
             btn.querySelector('span').classList.replace('font-bold', 'font-medium');
         });
         
-        // Set active button to blue
         const activeBtn = document.getElementById(`nav-${tabId}`);
         activeBtn.classList.remove('text-gray-400');
         activeBtn.classList.add('text-blue-600');
         activeBtn.querySelector('span').classList.replace('font-medium', 'font-bold');
         
-        // Update Header Subtitle
-        const titles = { 
-            'scanner':'Digital Pocket Laboratory', 
-            'notebook':'Your Field Logs', 
-            'hub':'Educational Resources', 
-            'admin':'Content Management' 
-        };
+        const titles = { 'scanner':'Digital Pocket Laboratory', 'notebook':'Your Field Logs', 'hub':'Educational Resources', 'admin':'Content Management' };
         document.getElementById('header-subtitle').textContent = titles[tabId];
     }
+
+    function openChatbot() {
+        document.getElementById('chatbot-overlay').classList.remove('hidden');
+        document.getElementById('chatbot-overlay').classList.add('flex');
+        const history = document.getElementById('chat-history');
+        if (history.innerHTML.trim() === "") {
+            addBotMessage(`Hello! I see you just scanned a sample of <b>${currentScannedRock}</b>. What would you like to know about it?`);
+        }
+    }
+
+    function closeChatbot() {
+        document.getElementById('chatbot-overlay').classList.add('hidden');
+        document.getElementById('chatbot-overlay').classList.remove('flex');
+    }
+
+    function sendChatMessage() {
+        const input = document.getElementById('chat-input');
+        const msg = input.value.trim();
+        if (!msg) return;
+
+        const history = document.getElementById('chat-history');
+        history.innerHTML += `<div class="flex justify-end mb-2"><div class="bg-indigo-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm text-sm max-w-[80%]">${msg}</div></div>`;
+        input.value = "";
+        history.scrollTop = history.scrollHeight;
+
+        setTimeout(() => {
+            addBotMessage("Great question. In the full version, I will search the GeoLearn database to answer this accurately!");
+        }, 800);
+    }
+
+    function addBotMessage(text) {
+        const history = document.getElementById('chat-history');
+        history.innerHTML += `<div class="flex justify-start mb-2"><div class="bg-white border border-gray-200 text-gray-800 px-4 py-2 rounded-2xl rounded-tl-sm text-sm max-w-[80%] shadow-sm">${text}</div></div>`;
+        history.scrollTop = history.scrollHeight;
+    }
+
+    window.onload = init;
 </script>
 </body>
 </html>
