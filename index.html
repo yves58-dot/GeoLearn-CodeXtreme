@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoLearn AI - Pocket Laboratory</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        #app-container { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        #scroll-content { flex-grow: 1; overflow-y: auto; padding-bottom: 80px; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+<div id="app-container" class="max-w-md mx-auto bg-gray-50 relative shadow-2xl">
+    
+    <!-- Header -->
+    <header class="bg-blue-900 text-white shadow-md rounded-b-3xl relative z-20 shrink-0">
+        <div class="px-6 py-6">
+            <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center space-x-3">
+                    <i data-lucide="microscope" class="w-7 h-7 text-blue-300"></i>
+                    <h1 class="text-2xl font-bold tracking-tight">GeoLearn AI</h1>
+                </div>
+                <span class="bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-md">DEV</span>
+            </div>
+            <p id="header-subtitle" class="text-blue-200 text-sm font-medium">Digital Pocket Laboratory</p>
+        </div>
+    </header>
+
+    <!-- Scrollable Main Content -->
+    <main id="scroll-content" class="px-4 pt-4 relative z-10">
+        
+        <!-- TAB 1: SCANNER (UI Only) -->
+        <div id="tab-scanner" class="block">
+            <div class="glass-panel rounded-2xl shadow-md p-6 border border-gray-100 mb-6 text-center">
+                <i data-lucide="camera" class="w-12 h-12 text-gray-400 mx-auto mb-3"></i>
+                <h3 class="font-bold text-gray-800">Scanner UI goes here</h3>
+                <p class="text-xs text-gray-500 mt-2">Waiting for AI integration...</p>
+            </div>
+        </div>
+
+        <!-- TAB 2: NOTEBOOK (UI Only) -->
+        <div id="tab-notebook" class="hidden">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="font-bold text-gray-800 text-lg">Field Notebook</h2>
+            </div>
+            <div class="text-center py-12 text-gray-400">
+                <i data-lucide="book-dashed" class="w-16 h-16 mx-auto mb-3 opacity-50"></i>
+                <p>Notebook database pending...</p>
+            </div>
+        </div>
+
+        <!-- TAB 3: LEARNING HUB (UI Only) -->
+        <div id="tab-hub" class="hidden">
+            <h2 class="font-bold text-gray-800 text-lg mb-4">Learning Hub</h2>
+            <div class="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                <i data-lucide="database" class="w-12 h-12 mx-auto mb-3 opacity-50"></i>
+                <p>Educational content loading...</p>
+            </div>
+        </div>
+
+        <!-- TAB 4: ADMIN PANEL (UI Only) -->
+        <div id="tab-admin" class="hidden">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="font-bold text-gray-800 text-lg flex items-center"><i data-lucide="shield-check" class="w-5 h-5 mr-2 text-blue-600"></i> Admin Portal</h2>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center mt-10">
+                <i data-lucide="lock" class="w-8 h-8 text-blue-600 mb-2"></i>
+                <p class="text-xs text-gray-500 text-center">Security implementation pending...</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- BOTTOM NAVIGATION BAR -->
+    <nav class="bg-white border-t border-gray-200 absolute bottom-0 w-full z-40 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div class="flex justify-around items-center h-16">
+            <button onclick="switchTab('scanner')" id="nav-scanner" class="nav-btn flex flex-col items-center w-full text-blue-600">
+                <i data-lucide="scan" class="w-6 h-6 mb-1"></i>
+                <span class="text-[10px] font-bold">Scanner</span>
+            </button>
+            <button onclick="switchTab('notebook')" id="nav-notebook" class="nav-btn flex flex-col items-center w-full text-gray-400">
+                <i data-lucide="book" class="w-6 h-6 mb-1"></i>
+                <span class="text-[10px] font-medium">Notebook</span>
+            </button>
+            <button onclick="switchTab('hub')" id="nav-hub" class="nav-btn flex flex-col items-center w-full text-gray-400">
+                <i data-lucide="graduation-cap" class="w-6 h-6 mb-1"></i>
+                <span class="text-[10px] font-medium">Learn</span>
+            </button>
+            <button onclick="switchTab('admin')" id="nav-admin" class="nav-btn flex flex-col items-center w-full text-gray-400">
+                <i data-lucide="shield" class="w-6 h-6 mb-1"></i>
+                <span class="text-[10px] font-medium">Admin</span>
+            </button>
+        </div>
+    </nav>
+
+</div>
+
+<script>
+    // Initialize icons
+    lucide.createIcons();
+
+    // Basic Tab Switching Logic
+    function switchTab(tabId) {
+        // Hide all tabs
+        document.getElementById('tab-scanner').classList.add('hidden');
+        document.getElementById('tab-notebook').classList.add('hidden');
+        document.getElementById('tab-hub').classList.add('hidden');
+        document.getElementById('tab-admin').classList.add('hidden');
+        
+        // Show active tab
+        document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+        // Reset all buttons to gray
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.classList.remove('text-blue-600');
+            btn.classList.add('text-gray-400');
+            btn.querySelector('span').classList.replace('font-bold', 'font-medium');
+        });
+        
+        // Set active button to blue
+        const activeBtn = document.getElementById(`nav-${tabId}`);
+        activeBtn.classList.remove('text-gray-400');
+        activeBtn.classList.add('text-blue-600');
+        activeBtn.querySelector('span').classList.replace('font-medium', 'font-bold');
+        
+        // Update Header Subtitle
+        const titles = { 
+            'scanner':'Digital Pocket Laboratory', 
+            'notebook':'Your Field Logs', 
+            'hub':'Educational Resources', 
+            'admin':'Content Management' 
+        };
+        document.getElementById('header-subtitle').textContent = titles[tabId];
+    }
+</script>
+</body>
+</html>
