@@ -1,1 +1,1 @@
-# GeoLearn-CodeXtreme
+# GeoLearn AI
